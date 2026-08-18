@@ -21,6 +21,36 @@ function favicon () {
   return utils.extractFilename(config.get('application.favicon'))
 }
 
+function safelyEvaluate (code: string): string {
+  const trimmed = code.trim()
+
+  // Case 1: Double-quoted string literal
+  if (/^"([^"\\]|\\.)*"$/.test(trimmed)) {
+    try {
+      return JSON.parse(trimmed)
+    } catch {
+      return trimmed.slice(1, -1).replace(/\\(.)/g, '$1')
+    }
+  }
+
+  // Case 2: Single-quoted string literal
+  if (/^'([^'\\]|\\.)*'$/.test(trimmed)) {
+    return trimmed.slice(1, -1).replace(/\\(.)/g, '$1')
+  }
+
+  // Case 3: Backtick-quoted string literal
+  if (/^`([^`\\]|\\.)*`$/.test(trimmed) && !trimmed.includes('${')) {
+    return trimmed.slice(1, -1).replace(/\\(.)/g, '$1')
+  }
+
+  // Case 4: Safe math/numeric expression (no letters, only digits, math operators, space)
+  if (/^[0-9+\-*/%().\s]+$/.test(trimmed)) {
+    return String(eval(trimmed)) // eslint-disable-line no-eval
+  }
+
+  throw new Error('Unsafe or unsupported expression')
+}
+
 export function getUserProfile () {
   return async (req: Request, res: Response, next: NextFunction) => {
     let template: string
@@ -58,7 +88,7 @@ export function getUserProfile () {
         if (!code) {
           throw new Error('Username is null')
         }
-        username = eval(code) // eslint-disable-line no-eval
+        username = safelyEvaluate(code)
       } catch (err) {
         username = '\\' + username
       }
