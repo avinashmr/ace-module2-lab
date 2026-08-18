@@ -13,10 +13,65 @@ import { challenges } from '../data/datacache'
 import * as security from '../lib/insecurity'
 import * as utils from '../lib/utils'
 
+function isSafeInput (input: string): boolean {
+  // 1. Block any backslashes to prevent any obfuscated escape sequences
+  if (input.includes('\\')) {
+    return false
+  }
+
+  // 2. Blacklist of dangerous words (case-insensitive) that could be used for sandbox escape or execution
+  const forbiddenKeywords = [
+    'constructor',
+    'prototype',
+    '__proto__',
+    'process',
+    'require',
+    'global',
+    'globalThis',
+    'mainModule',
+    'exec',
+    'spawn',
+    'child_process',
+    'eval',
+    'Function',
+    'Object',
+    'Reflect',
+    'Proxy',
+    'Symbol',
+    'defineProperty',
+    'getOwnProperty',
+    'atob',
+    'btoa',
+    'setInterval',
+    'setTimeout'
+  ]
+
+  const lowerInput = input.toLowerCase()
+  for (const keyword of forbiddenKeywords) {
+    if (lowerInput.includes(keyword.toLowerCase())) {
+      return false
+    }
+  }
+
+  // 3. Block bracket property access to prevent dynamic/computed property access
+  // e.g. obj[variable] or obj['prop']
+  // Allowed brackets are only those not preceded by object/identifier/bracket/quote characters.
+  const bracketPropertyAccessRegex = /[\w)\]}'"`\x60{]\s*\[/
+  if (bracketPropertyAccessRegex.test(input)) {
+    return false
+  }
+
+  return true
+}
+
 export function b2bOrder () {
   return ({ body }: Request, res: Response, next: NextFunction) => {
     if (utils.isChallengeEnabled(challenges.rceChallenge) || utils.isChallengeEnabled(challenges.rceOccupyChallenge)) {
       const orderLinesData = body.orderLinesData || ''
+      if (!isSafeInput(orderLinesData)) {
+        res.status(400).json({ status: 'error', error: 'Malicious activity detected.' })
+        return
+      }
       try {
         const sandbox = { safeEval, orderLinesData }
         vm.createContext(sandbox)
