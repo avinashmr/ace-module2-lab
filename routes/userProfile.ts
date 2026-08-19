@@ -21,6 +21,93 @@ function favicon () {
   return utils.extractFilename(config.get('application.favicon'))
 }
 
+function parseMath (str: string): number {
+  let pos = 0
+  const cleanStr = str.replace(/\s+/g, '')
+
+  function peek (): string {
+    return cleanStr[pos] || ''
+  }
+
+  function consume (char?: string): string {
+    const next = peek()
+    if (char && next !== char) {
+      throw new Error(`Expected ${char} but got ${next}`)
+    }
+    if (next) pos++
+    return next
+  }
+
+  function parseExpression (): number {
+    return parseAdditive()
+  }
+
+  function parseAdditive (): number {
+    let left = parseMultiplicative()
+    while (true) {
+      const op = peek()
+      if (op === '+' || op === '-') {
+        consume()
+        const right = parseMultiplicative()
+        if (op === '+') left += right
+        else left -= right
+      } else {
+        break
+      }
+    }
+    return left
+  }
+
+  function parseMultiplicative (): number {
+    let left = parsePrimary()
+    while (true) {
+      const op = peek()
+      if (op === '*' || op === '/' || op === '%') {
+        consume()
+        const right = parsePrimary()
+        if (op === '*') left *= right
+        else if (op === '/') left /= right
+        else left %= right
+      } else {
+        break
+      }
+    }
+    return left
+  }
+
+  function parsePrimary (): number {
+    const next = peek()
+    if (next === '(') {
+      consume('(')
+      const val = parseExpression()
+      consume(')')
+      return val
+    }
+    if (next === '-') {
+      consume('-')
+      return -parsePrimary()
+    }
+    if (next === '+') {
+      consume('+')
+      return parsePrimary()
+    }
+    let numStr = ''
+    while (/[0-9.]/.test(peek())) {
+      numStr += consume()
+    }
+    if (numStr === '') {
+      throw new Error('Expected number')
+    }
+    return parseFloat(numStr)
+  }
+
+  const result = parseExpression()
+  if (pos < cleanStr.length) {
+    throw new Error('Unexpected extra characters')
+  }
+  return result
+}
+
 function safelyEvaluate (code: string): string {
   const trimmed = code.trim()
 
@@ -45,7 +132,7 @@ function safelyEvaluate (code: string): string {
 
   // Case 4: Safe math/numeric expression (no letters, only digits, math operators, space)
   if (/^[0-9+\-*/%().\s]+$/.test(trimmed)) {
-    return String(eval(trimmed)) // eslint-disable-line no-eval
+    return String(parseMath(trimmed))
   }
 
   throw new Error('Unsafe or unsupported expression')
@@ -90,10 +177,10 @@ export function getUserProfile () {
         }
         username = safelyEvaluate(code)
       } catch (err) {
-        username = '\\\\' + username
+        username = '\\\\\\\\' + username
       }
     } else {
-      username = '\\\\' + username
+      username = '\\\\\\\\' + username
     }
 
     const themeKey = config.get<string>('application.theme') as keyof typeof themes

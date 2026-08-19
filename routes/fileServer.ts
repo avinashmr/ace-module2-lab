@@ -15,7 +15,20 @@ export function servePublicFiles () {
   return ({ params, query }: Request, res: Response, next: NextFunction) => {
     const file = params.file
 
-    if (!file.includes('/')) {
+    let decodedFile = file
+    if (decodedFile) {
+      while (decodedFile.includes('%')) {
+        try {
+          const prev = decodedFile
+          decodedFile = decodeURIComponent(decodedFile)
+          if (decodedFile === prev) break
+        } catch (err) {
+          break
+        }
+      }
+    }
+
+    if (file && !file.includes('/') && !file.includes('\\') && decodedFile && !decodedFile.includes('/') && !decodedFile.includes('\\')) {
       verify(file, res, next)
     } else {
       res.status(403)
@@ -27,11 +40,22 @@ export function servePublicFiles () {
     if (file) {
       file = security.cutOffPoisonNullByte(file)
     }
+
+    const ftpPath = path.resolve('ftp')
+    const resolvedPath = path.resolve('ftp', file || '')
+    const relative = path.relative(ftpPath, resolvedPath)
+    const isSafe = relative && !relative.startsWith('..') && !path.isAbsolute(relative)
+
+    if (!isSafe) {
+      res.status(403)
+      return next(new Error('Directory traversal is not allowed!'))
+    }
+
     if (file && (endsWithAllowlistedFileType(file) || (file === 'incident-support.kdbx'))) {
       challengeUtils.solveIf(challenges.directoryListingChallenge, () => { return file.toLowerCase() === 'acquisitions.md' })
       verifySuccessfulPoisonNullByteExploit(file)
 
-      res.sendFile(path.resolve('ftp/', file))
+      res.sendFile(resolvedPath)
     } else {
       res.status(403)
       next(new Error('Only .md and .pdf files are allowed!'))
