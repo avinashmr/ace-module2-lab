@@ -6,6 +6,7 @@ import { challenges } from '../data/datacache'
 export function checkKeys () {
   return async (req: Request, res: Response) => {
     try {
+      // @ts-ignore
       const { HDNodeWallet } = await import('ethers')
       const mnemonic = 'purpose betray marriage blame crunch monitor spin slide donate sport lift clutch'
       const mnemonicWallet = HDNodeWallet.fromPhrase(mnemonic)

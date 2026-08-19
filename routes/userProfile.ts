@@ -90,17 +90,17 @@ export function getUserProfile () {
         }
         username = safelyEvaluate(code)
       } catch (err) {
-        username = '\\' + username
+        username = '\\\\' + username
       }
     } else {
-      username = '\\' + username
+      username = '\\\\' + username
     }
 
     const themeKey = config.get<string>('application.theme') as keyof typeof themes
     const theme = themes[themeKey] || themes['bluegrey-lightgreen']
 
     if (username) {
-      template = template.replace(/_username_/g, username)
+      template = template.replace(/_username_/g, '!{username}')
     }
     template = template.replace(/_emailHash_/g, security.hash(user?.email))
     template = template.replace(/_title_/g, entities.encode(config.get<string>('application.name')))
@@ -125,7 +125,20 @@ export function getUserProfile () {
         'Content-Security-Policy': CSP
       })
 
-      res.send(fn(user))
+      const context = new Proxy(user, {
+        get: (target, prop) => {
+          if (prop === 'username') {
+            return username
+          }
+          const val = Reflect.get(target, prop)
+          if (typeof val === 'function') {
+            return val.bind(target)
+          }
+          return val
+        }
+      }) as any
+
+      res.send(fn(context))
     } catch (err) {
       next(new Error('Blocked illegal activity by ' + req.socket.remoteAddress))
     }

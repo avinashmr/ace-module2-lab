@@ -14,6 +14,7 @@ export function nftMintListener () {
   return async (req: Request, res: Response) => {
     try {
       if (!isEventListenerCreated) {
+        // @ts-ignore
         const { WebSocketProvider, Contract } = await import('ethers')
         const provider = new WebSocketProvider(`wss://eth-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY ?? ''}`)
         provider.websocket.onerror = (error: any) => {
